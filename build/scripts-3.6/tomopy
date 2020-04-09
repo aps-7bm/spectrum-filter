@@ -1,0 +1,175 @@
+#!/home/beams/AKASTENGREN/anaconda3/envs/astra/bin/python
+
+import os
+import re
+import sys
+import argparse
+import logging
+import time
+import shutil
+import pathlib
+from datetime import datetime
+
+from tomopy_cli import config, __version__
+from tomopy_cli import log
+from tomopy_cli import recon
+from tomopy_cli import find_center
+from tomopy_cli import file_io
+from tomopy_cli import post
+
+
+def init(args):
+
+    if not os.path.exists(str(args.config)):
+        config.write(args.config)
+    else:
+        log.error("{0} already exists".format(args.config))
+
+
+def run_find_center(args):
+
+    log.warning('find center start')
+    find_center.find_rotation_axis(args)
+    log.warning('find center end')
+
+    # update tomopy.conf
+    sections = config.RECON_PARAMS
+    config.write(args.config, args=args, sections=sections)
+
+def run_seg(args):
+
+    log.warning('segmentation start')
+    post.segment(args)
+    log.warning('segmentation end')
+
+    # update tomopy.conf
+    sections = config.RECON_PARAMS
+    config.write(args.config, args=args, sections=sections)
+
+    
+def run_rec(args):
+
+    log.warning('reconstruction start')
+    if os.path.isfile(args.hdf_file):    
+
+        log.info("reconstructing a single file: %s" % args.hdf_file)   
+        recon.rec(args)
+
+    elif os.path.isdir(args.hdf_file):
+
+        # Add a trailing slash if missing
+        top = os.path.join(args.hdf_file, '')
+
+        dictionary = file_io.read_rot_centers(args)
+        log.warning("reconstructing a folder containing %d files" % len(dictionary))   
+        index = 0
+        for key in dictionary:
+            dict2 = dictionary[key]
+            for h5fname in dict2:
+                args.rotation_axis = dict2[h5fname]
+                fname = top + h5fname
+                args.hdf_file = fname
+                log.warning("file %d/%d; ord(%s);  %s center: %f" % (index, len(dictionary)-1, key, args.hdf_file, args.rotation_axis))
+                index += 1
+                recon.rec(args)
+    else:
+        log.error("Directory or File Name does not exist: %s" % args.hdf_file)
+
+    # update tomopy.conf
+    sections = config.RECON_PARAMS
+    config.write(args.config, args=args, sections=sections)
+    '''
+    if (args.reconstruction_type == "slice") or (args.reconstruction_type == "full"):
+    # add reconstruction command in ~/logs/user_last_name.log
+        rec_log_msg = "\n" + "tomopy recon" + " --rotation-axis " + str(args.rotation_axis) \
+                                            + " --reconstruction-type " + str(args.reconstruction_type) \
+                                            + " --hdf-file " + str(args.hdf_file) \
+                                            + " --binning " + str(args.binning) \
+                                            + " --reconstruction-algorithm " + str(args.reconstruction_algorithm) \
+                                            + " --retrieve-phase-method " + str(args.retrieve_phase_method) \
+                                            + " --energy " + str(args.energy) \
+                                            + " --propagation-distance " + str(args.propagation_distance) \
+                                            + " --pixel-size " + str(args.pixel_size) \
+                                            + " --retrieve-phase-alpha  " + str(args.retrieve_phase_alpha)
+
+        log.info('  *** command to repeat the reconstruction: %s' % rec_log_msg)
+        p = pathlib.Path(args.hdf_file)
+        lfname = pathlib.Path.joinpath(pathlib.Path(args.logs_home), p.stem + '.log')
+
+        log.info('  *** command added to %s ' % lfname.as_posix())
+        with open(lfname, "a") as myfile:
+            myfile.write(rec_log_msg)
+    '''
+    if (args.reconstruction_type == "full"):
+    # if (args.reconstruction_type == "slice") or (args.reconstruction_type == "full"):
+        # copy tomopy.conf in the reconstructed data directory path
+        # in this way you can reproduce the reconstruction by simply running:
+        # $ tomopy recon --config /path/tomopy.conf
+
+        # config_path = pathlib.Path(args.config)
+        # p = pathlib.Path(args.hdf_file)
+        # log_fname = pathlib.Path.joinpath(p.parent, '_rec', p.stem + '_rec', config_path.name)
+        # un-did the above 
+        tail = os.sep + os.path.splitext(os.path.basename(args.hdf_file))[0]+ '_rec' + os.sep 
+        log_fname = os.path.dirname(args.hdf_file) + '_rec' + tail + os.path.split(args.config)[1]
+        try:
+            shutil.copyfile(args.config, log_fname)
+            log.info('  *** copied %s to %s ' % (args.config, log_fname))
+        except:
+            log.error('  *** attempt to copy %s to %s failed' % (args.config, log_fname))
+            pass
+        log.info(' *** command to repeat the reconstruction: tomopy recon --config {:s}'.format(log_fname))
+    log.warning('reconstruction end')
+
+
+
+def main():
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config', **config.SECTIONS['general']['config'])
+    parser.add_argument('--version', action='version',
+                        version='%(prog)s {}'.format(__version__))
+
+    tomo_params = config.RECON_PARAMS
+    find_center_params = config.RECON_PARAMS
+
+    cmd_parsers = [
+        ('init',        init,            (),                             "Create configuration file"),
+        ('recon',       run_rec,         tomo_params,                    "Run tomographic reconstruction"),
+        ('segment',     run_seg,         tomo_params,                    "Run segmentation on reconstured data"),
+        ('find_center', run_find_center, find_center_params,             "Find rotation axis location for all hdf files in a directory"),
+    ]
+
+    subparsers = parser.add_subparsers(title="Commands", metavar='')
+
+    for cmd, func, sections, text in cmd_parsers:
+        cmd_params = config.Params(sections=sections)
+        cmd_parser = subparsers.add_parser(cmd, help=text, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+        cmd_parser = cmd_params.add_arguments(cmd_parser)
+        cmd_parser.set_defaults(_func=func)
+
+    args = config.parse_known_args(parser, subparser=True)
+
+    # create logger
+    logs_home = args.logs_home
+
+    # make sure logs directory exists
+    if not os.path.exists(logs_home):
+        os.makedirs(logs_home)
+
+    lfname = os.path.join(logs_home, 'tomopy_' + datetime.strftime(datetime.now(), "%Y-%m-%d_%H_%M_%S") + '.log')
+ 
+    log.setup_logger(lfname)
+    log.info("Saving log at %s" % lfname)
+
+    try:
+        config.log_values(args)
+        args._func(args)
+    except RuntimeError as e:
+        log.error(str(e))
+        sys.exit(1)
+
+
+if __name__ == '__main__':
+    main()
+
