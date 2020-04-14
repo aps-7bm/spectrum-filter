@@ -1,12 +1,12 @@
--=========
+==========
 spectrum-filter
--=========
+==========
 
-**spectrum-filter** is command-line-interface to compute the effective spectrum of a polychromatic x-ray beam passing through user-selected filters and illuminating a user-selected scintillator crystal.
+**spectrum-filter** is command-line-interface to compute the effective spectrum of a polychromatic x-ray beam passing through user-selected filters and illuminating a user-selected scintillator crystal.  The main purpose of this code is to provide matplotlib plots to allow researchers to better understand the beam spectrum and the effect of filters on the beam.
 
 
 Installation
--===========
+============
 
 ::
 
@@ -20,7 +20,7 @@ in a prepared virtualenv or as root for system-wide installation.
 
 
 Update
--=====
+======
 
 **spectrum-filter** is constantly updated to include new features. To update your locally installed version::
 
@@ -30,7 +30,7 @@ Update
 
 
 Dependencies
--===========
+============
 
 Numpy, Scipy, Matplotlib, and tabulate
 
