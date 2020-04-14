@@ -1,0 +1,93 @@
+#!/usr/bin/env python
+
+import os
+import re
+import sys
+import argparse
+import logging
+import time
+import pathlib
+from datetime import datetime
+
+from spectrum_filter import config, __version__
+from spectrum_filter import log
+from spectrum_filter import plot
+
+
+def init(args):
+    if not os.path.exists(str(args.config)):
+        config.write(args.config)
+    else:
+        log.error("{0} already exists".format(args.config))    
+
+
+def sample_plot(args):
+    print(args)
+    plot.plot_sample_hardening(args)
+
+
+def cum_filter_plot(args):
+    plot.plot_filter_effect(args)
+
+
+def filter_set_plot(args):
+    plot.plot_filter_set(args)
+
+
+def scint_depth_plot(args):
+    plot.plot_scintillator_thickness_effect(args)
+
+
+def run_status(args):
+    config.log_values(args)
+
+    
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config', **config.SECTIONS['general']['config'])
+    parser.add_argument('--version', action='version',
+                        version='%(prog)s {}'.format(__version__))
+
+
+    cmd_parsers = [
+        ('init',        init,            (),                             "Create configuration file"),
+        ('sample',      sample_plot,     config.ALL_PARAMS,              "Show effect of various sample thicknesses"),
+        ('filters',     cum_filter_plot, config.ALL_PARAMS,              "Show effect of various filters"),
+        ('filter-set',  filter_set_plot, config.ALL_PARAMS,              "Show effect of a filter set"),
+        ('scintillator',scint_depth_plot,config.ALL_PARAMS,              "Show depth profile in scintillator"),
+        ('status',      run_status,      config.ALL_PARAMS,              "Show the status"),
+    ]
+
+    subparsers = parser.add_subparsers(title="Commands", metavar='')
+
+    for cmd, func, sections, text in cmd_parsers:
+        cmd_params = config.Params(sections=sections)
+        cmd_parser = subparsers.add_parser(cmd, help=text, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+        cmd_parser = cmd_params.add_arguments(cmd_parser)
+        cmd_parser.set_defaults(_func=func)
+
+    args = config.parse_known_args(parser, subparser=True)
+
+    # create logger
+    logs_home = args.logs_home
+
+    # make sure logs directory exists
+    if not os.path.exists(logs_home):
+        os.makedirs(logs_home)
+
+    lfname = os.path.join(logs_home, 'spectrum-filter' + datetime.strftime(datetime.now(), "%Y-%m-%d_%H_%M_%S") + '.log')
+ 
+    log.setup_custom_logger(lfname)
+    log.info("Saving log at %s" % lfname)
+
+    try:
+        # config.log_values(args)
+        args._func(args)
+    except RuntimeError as e:
+        log.error(str(e))
+        sys.exit(1)
+         
+
+if __name__ == '__main__':
+    main()
+

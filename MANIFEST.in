@@ -1,1 +1,1 @@
-include tomopy_cli/beam_hardening_data/*
+include spectrum_filter/beam_hardening_data/*

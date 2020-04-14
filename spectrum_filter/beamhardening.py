@@ -50,40 +50,30 @@ Usage:
 
 '''
 from copy import deepcopy
-import os
 from pathlib import Path, PurePath
 
 import numpy as np
 import scipy.interpolate
 import scipy.integrate
-import h5py
 from scipy.interpolate import InterpolatedUnivariateSpline
-from scipy.signal import convolve
-from scipy.signal.windows import gaussian
 
-from tomopy.util import mproc
-from tomopy_cli import log
-from tomopy_cli import config
+from spectrum_filter import log
+from spectrum_filter import config
 
 #Global variables we need for computing LUT
-filters = {}
+filters = []
+scintillator = {}
 sample_material = None
-scintillator_material = None
-scintillator_thickness = None
-ref_trans = None
-d_source = 0
-pixel_size = 0
-center_row = 0
-spectra_dict = None
 possible_materials = {}
 
 # Add a trailing slash if missing
-top = os.path.join(Path(__file__).parent, '')
-data_path = os.path.join(top, 'beam_hardening_data')
+data_path = Path(__file__).parent.joinpath('beam_hardening_data')
+default_source = data_path.joinpath('Psi_00urad.dat')
 
 #Global variables for when we convert images
+input_spectrum = None
 centerline_spline = None
-angular_spline = None
+
 
 class Spectrum:
     '''Class to hold the spectrum: energies and spectral power.
@@ -120,10 +110,10 @@ class Material:
     
     def fread_absorption_data(self):
 
-        raw_data = np.genfromtxt(os.path.join(data_path, self.name + '_properties_xCrossSec.dat'))
+        raw_data = np.genfromtxt(data_path.joinpath(self.name + '_properties_xCrossSec.dat'))
         self.energy_array = raw_data[:,0] / 1000.0      #in keV
         self.absorption_array = raw_data[:,3]   #in cm^2/g, from XCOM in XOP
-        self.attenuation_array = raw_data[:,6]  #in cm^2/g, from XCOM in XOP, ignoring coherent scattering
+        self.attenuation_array = raw_data[:,7]  #in cm^2/g, from XCOM in XOP, ignoring coherent scattering
     
     def interp_function(self,energies,absorptions):
         '''Return a function to interpolate logs of energies into logs of absorptions.
@@ -163,21 +153,22 @@ class Material:
                     np.exp(-self.finterpolate_attenuation(output_spectrum.energies) * filter_proj_density))
         return output_spectrum
     
+
     def fcompute_absorbed_spectrum(self,thickness,input_spectrum):
         '''Computes the absorbed power of a filter.
         Inputs:
         thickness: the thickness of the filter in um
         input_spectrum: Spectrum object for incident beam
         Output:
-        Spectrum objection for absorbed spectrum
+        Spectrum object for absorbed spectrum
         '''
         output_spectrum = deepcopy(input_spectrum)
         #Compute filter projected density
         filter_proj_density = self.fcompute_proj_density(thickness)
-        #Find the spectral transmission using Beer-Lambert law
-        output_spectrum.spectral_power = (input_spectrum.spectral_power -
-                - np.exp(-self.finterpolate_absorption(input_spectrum.energies) * filter_proj_density) 
-                * input_spectrum.spectral_power)
+        #Find the spectral absorption using Beer-Lambert law
+        ext_lengths = self.finterpolate_absorption(input_spectrum.energies) * filter_proj_density 
+        absorption = 1.0 - np.exp(-ext_lengths)
+        output_spectrum.spectral_power = input_spectrum.spectral_power * absorption 
         return output_spectrum
     
     def fcompute_absorbed_power(self,thickness,input_spectrum):
@@ -190,6 +181,7 @@ class Material:
         absorbed power
         '''
         return self.fcompute_absorbed_spectrum(thickness,input_spectrum).fintegrated_power()
+
 
 def fread_config_file(config_filename=None):
     '''Read in parameters for beam hardening corrections from file.
@@ -213,30 +205,25 @@ def fread_config_file(config_filename=None):
                 symbol = line.split(',')[0].split('=')[1].strip()
                 density = float(line.split(',')[1].split('=')[1])
                 possible_materials[symbol] = Material(symbol, density)
-            elif line.startswith('ref_trans'):
-                global ref_trans
-                ref_trans = float(line.split(':')[1].strip())
 
 
-def fread_source_data():
+def fread_source_data(source_file = None):
     '''Reads the spectral power data from files.
     Data file comes from the BM spectrum module in XOP.
     Return:
     Dictionary of spectra at the various psi angles from the ring plane.
     '''
-    spectra_dict = {}
-    file_list = list(filter(lambda x: x.endswith(('.dat', '.DAT')), os.listdir(data_path)))
-    for f_name in file_list:
-        f_path = os.path.join(data_path, f_name)
-        #print(f_path)
-        if os.path.isfile(f_path) and f_name.startswith('Psi'):
-            log.info('  *** *** source file {:s} located'.format(f_name))
-            f_angle = float(f_name.split('_')[1][:2])
-            spectral_data = np.genfromtxt(f_path, comments='!')
-            spectral_energies = spectral_data[:,0] / 1000.
-            spectral_power = spectral_data[:,1]
-            spectra_dict[f_angle] = Spectrum(spectral_energies, spectral_power)
-    return spectra_dict
+    if not source_file:
+        source_file = default_source
+    else:
+        source_file = Path(source_file)
+    log.info('  *** *** source file {:s} located'.format(str(source_file)))
+    spectral_data = np.genfromtxt(source_file, comments='!')
+    spectral_energies = spectral_data[:,0] / 1000.
+    spectral_power = spectral_data[:,1]
+    global input_spectrum
+    input_spectrum = Spectrum(spectral_energies, spectral_power)
+    return input_spectrum
 
 
 def check_material(material_str):
@@ -251,18 +238,14 @@ def check_material(material_str):
         raise ValueError('No such material in possible_materials: {0:s}'.format(material_str))
 
 
-def add_filter(symbol, thickness):
+def add_filter(symbol, thickness, filters):
     '''Add a filter of a given symbol and thickness.
     '''
-    if symbol != 'none':
-        filters[check_material(symbol)] = float(thickness)
-
-
-def add_scintillator(symbol, thickness):
-    '''Add a scintillator of a given symbol and thickness.
-    '''
-    scintillator_material = check_material(symbol)
-    scintillator_thickness = float(thickness)
+    if symbol != 'none' and thickness > 0:
+        log.info('  *** *** material = {:s}'.format(symbol))
+        log.info('  *** *** thickness = {:f} \u03bcm'.format(thickness))
+        filters.append((check_material(symbol), thickness))
+    return filters
 
 
 def parse_params(params):
@@ -270,19 +253,41 @@ def parse_params(params):
     Parse the input parameters to fill in filters, sample material,
     and scintillator material and thickness.
     """
-    global scintillator_material
-    scintillator_material = check_material(params.scintillator_material)
-    global scintillator_thickness
-    scintillator_thickness = params.scintillator_thickness
-    add_filter(params.filter_1_material, params.filter_1_thickness)
-    add_filter(params.filter_2_material, params.filter_2_thickness)
-    add_filter(params.filter_3_material, params.filter_3_thickness)
-    global d_source
-    d_source = params.source_distance
+    log.info('  Reading config parameters')
+    global scintillator
+    scintillator['material'] = check_material(params.scint_material)
+    scintillator['thickness'] = params.scint_thickness
+    log.info('  *** scintillator')
+    log.info('  *** *** material = {:s}'.format(scintillator['material'].name))
+    log.info('  *** *** thickness = {:f} \u03bcm'.format(scintillator['thickness']))
+    global filters
+    log.info('  *** filters')
+    filters = parse_filters(params)
+    for i, (m, t) in enumerate(filters):
+        log.info('  *** *** Filter {:d}'.format(i))
+        log.info('  *** *** *** Material: {:s}'.format(m.name))
+        log.info('  *** *** *** Thickness: {:.0f} \u03bcm'.format(t))
     global sample_material
     sample_material = check_material(params.sample_material)
-    global pixel_size
-    pixel_size = params.pixel_size
+    global max_sample_thickness
+    max_sample_thickness = params.sample_max_thickness
+    log.info('  *** sample')
+    log.info('  *** *** material = {:s}'.format(sample_material.name))
+    log.info('  *** *** max thickness = {:f}'.format(max_sample_thickness))
+    log.info('  *** config done')
+
+
+def parse_filters(params):
+    '''Parses the filter material and filter thickness lists.
+    Input: 
+    params: parameters from config file or CLI arguments
+    Output:
+    list of tuples with form (filter material, thickness)
+    '''
+    if len(params.filter_matl_list) != len(params.filter_thick_list):
+        log.error('  Mismatch in lengths of filter material and thickness inputs')
+        return
+    return [(check_material(m.strip()),t) for m, t in zip(params.filter_matl_list, params.filter_thick_list)]
 
 
 def fapply_filters(filters, input_spectrum):
@@ -294,56 +299,68 @@ def fapply_filters(filters, input_spectrum):
         Output:
         spectral power transmitted through the filter set.
         '''
+    log.info('  Applying filters')
     temp_spectrum = deepcopy(input_spectrum)
-    for filt, thickness in filters.items():
-        temp_spectrum = filt.fcompute_transmitted_spectrum(thickness, temp_spectrum)
+    for i, (m,t) in enumerate(filters):
+        log.info('  *** applying filter {:d}: {:s}, thickness {:.0f} \u03bcm'.format(
+                    i, m.name, t))
+        temp_spectrum = m.fcompute_transmitted_spectrum(t, temp_spectrum)
     return temp_spectrum
 
 
-def ffind_calibration_one_angle(input_spectrum):
-    '''Makes a scipy interpolation function to be used to correct images.
+def find_detected_spectrum(input_spectrum):
+    return scintillator['material'].fcompute_absorbed_spectrum(
+                            scintillator['thickness'], input_spectrum)
+
+
+def find_sample_trans(input_spectrum, sample_thickness):
+    '''Find the sample transmission, mean energy transmitted through the sample,
+    and the mean detected energy for a given thickness of sample.
+    Inputs:
+    input_spectrum: input Spectrum object with incident spectrum on sample
+    sample_thickness: thickness of sample material in microns
+    Outputs:
+    transmission of sample, mean energy (in keV) of beam transmitted through
+        the sample, and mean energy (in keV) of detected beam.
+    '''
+    clear_air_signal = scintillator['material'].fcompute_absorbed_power(
+                            scintillator['thickness'], input_spectrum)
+    sample_filt_spectrum = sample_material.fcompute_transmitted_spectrum(
+                            sample_thickness, input_spectrum)
+    detected_spectrum = find_detected_spectrum(sample_filt_spectrum)
+    sample_trans = sample_filt_spectrum.fintegrated_power() / input_spectrum.fintegrated_power()    
+    detected_trans = detected_spectrum.fintegrated_power() / clear_air_signal
+    return sample_trans, detected_trans, sample_filt_spectrum.fmean_energy(), detected_spectrum.fmean_energy()   
+
+
+def find_sample_calibration(input_spectrum):
+    '''Makes a spline function to relate transmission to sample thickness.
+    Also makes a spline function to relate sample thickness to effective energies.
+    Input: Spectrum object
+    Returns:
+    InterpolatedUnivariateSpline object which takes transmission as input, 
+        returning sample thickness in microns.
     '''
     #Make an array of sample thicknesses
-    sample_thicknesses = np.sort(np.concatenate((-np.logspace(1,0,11), [0], np.logspace(-1,4.5,221))))
+    sample_thicknesses = np.linspace(0, max_sample_thickness, 101)
     #For each thickness, compute the absorbed power in the scintillator
     detected_power = np.zeros_like(sample_thicknesses)
+    sample_eff_energy = np.zeros_like(sample_thicknesses)
+    detected_eff_energy = np.zeros_like(sample_thicknesses)
     for i in range(sample_thicknesses.size):
         sample_filtered_power = sample_material.fcompute_transmitted_spectrum(sample_thicknesses[i],
                                                                               input_spectrum)
-        detected_power[i] = scintillator_material.fcompute_absorbed_power(scintillator_thickness,
-                                                                          sample_filtered_power)
+        sample_eff_energy[i] = sample_filtered_power.fmean_energy()
+        detected_spectrum = scintillator['material'].fcompute_absorbed_spectrum(
+                                                    scintillator['thickness'], sample_filtered_power)
+        detected_eff_energy[i] = detected_spectrum.fmean_energy()
+        detected_power[i] = detected_spectrum.fintegrated_power()
+
     #Compute an effective transmission vs. thickness
-    sample_effective_trans = detected_power / scintillator_material.fcompute_absorbed_power(scintillator_thickness,
-                                                                                            input_spectrum)
-    #Return a spline, but make sure things are sorted in ascending order
-    inds = np.argsort(sample_effective_trans)
-    #for i in inds:
-    #    print(sample_effective_trans[i], sample_thicknesses[i])
-    return InterpolatedUnivariateSpline(sample_effective_trans[inds], sample_thicknesses[inds])
-
-
-def ffind_calibration(spectra_dict):
-    '''Do the correlation at the reference transmission. 
-    Treat the angular dependence as a correction on the thickness vs.
-    transmission at angle = 0.
-    '''
-    angles_urad = []
-    cal_curve = []
-    for angle in sorted(spectra_dict.keys()):
-        angles_urad.append(float(angle))
-        spectrum = spectra_dict[angle]
-        #Filter the beam
-        filtered_spectrum = fapply_filters(filters, spectrum)
-        #Create an interpolation function based on this
-        angle_spline = ffind_calibration_one_angle(filtered_spectrum)
-        if angle  == 0:
-            global centerline_spline
-            centerline_spline = angle_spline
-        cal_curve.append(angle_spline(ref_trans))
-    cal_curve /= cal_curve[0]
-    global angular_spline
-    angular_spline = InterpolatedUnivariateSpline(angles_urad, cal_curve) 
-
+    sample_effective_trans = detected_power / detected_power[0]
+    #Return splines, but make sure things are sorted in ascending order
+    trans_spline = InterpolatedUnivariateSpline(sample_effective_trans, sample_thicknesses)
+    return trans_spline
 
 def fcorrect_as_pathlength_centerline(input_trans):
     """Corrects for the beam hardening, assuming we are in the ring plane.
@@ -353,50 +370,3 @@ def fcorrect_as_pathlength_centerline(input_trans):
     data_dtype = input_trans.dtype
     return_data = mproc.distribute_jobs(input_trans,centerline_spline,args=(),axis=1)
     return return_data
-
-
-def fcorrect_as_pathlength(input_trans):
-    '''Corrects for the angular dependence of the BM spectrum.
-    First, use fconvert_data to get in terms of pathlength assuming we are
-    in the ring plane.  Then, use this function to correct.
-    '''
-    angles = np.abs(np.arange(pathlength_image.shape[0]) - center_row)
-    angles *= pixel_size / d_source
-    correction_factor = angle_spline(angles)
-    return centerline_spline(input_trans) * correction_factor[:,None]
-
-
-def find_center_row(params):
-    '''Finds the brightest row of the input image.
-    Filters to make sure we ignore spurious noise.
-    '''
-    with h5py.File(params.file_name,'r') as hdf_file:
-        bright = hdf_file['/exchange/data_white'][...]
-    if len(bright.shape) > 2:
-        bright = bright[-1,...]
-    vertical_slice = np.sum(bright, axis=1, dtype=np.float64)
-    gaussian_filter = scipy.signal.windows.gaussian(200,20)
-    filtered_slice = scipy.signal.convolve(vertical_slice, gaussian_filter,
-                                            mode='same')
-    center_row = float(np.argmax(filtered_slice))
-    ffind_calibration(spectra_dict)
-    return center_row
-
-
-def initialize(params):
-    '''Initializes the beam hardening correction code.
-    '''
-    log.info('  *** beam hardening')
-    if params.beam_hardening_method != 'standard':
-        log.info('   *** *** OFF')
-    fread_config_file()
-    global spectra_dict
-    spectra_dict = fread_source_data()
-    parse_params(params)
-    center_row = find_center_row(params)
-    log.info("  *** *** Center row for beam hardening = {0:f}".format(center_row))
-    if int(params.binning) > 0:
-        center_row /= pow(2, int(params.binning))
-        log.info("  *** *** Center row after binning = {:f}".format(center_row))
-    params.center_row = center_row
-    log.info('  *** *** beam hardening initialization finished')

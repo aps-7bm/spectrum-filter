@@ -1,6 +1,6 @@
 import numpy as np
 
-from tomopy_cli import log
+from spectrum_filter import log
 
 
 def theta_step(start, end, proj_number):
@@ -37,6 +37,23 @@ def range_list(value):
         return (lst[0], lst[1], lst[2])
 
     raise argparse.ArgumentTypeError("Cannot parse {}".format(value))
+
+
+def float_list(value):
+    """
+    Split *value* separated by ',' into float list
+    """
+    stripped_value = value.strip('\'\"')
+    return [float(i) for i in stripped_value.split(',') if i != 'none']
+
+
+def str_list(value):
+    """
+    Split *value* separated by ',' into str list
+    """
+    stripped_value = value.strip('\'\"')
+    return [i for i in stripped_value.split(',') if i != 'none']
+
 
 def restricted_float(x):
 
