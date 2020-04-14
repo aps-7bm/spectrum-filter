@@ -45,6 +45,7 @@ comma-delimited list of symbols in quotation marks.  Set the thicknesses of the 
 the `filter-thicknesses` option in the same way.  For a list of the available filters, use::
     $ spectrum-filter materials
 
+
 Model beam hardening in sample
 -----------------------------
 
@@ -59,11 +60,13 @@ Model a set of filters used individually
 To model a set of filter options that will be used individually, use the `filter-set` option.::
     $ spectrum-filter filter-set --filter-materials "Be, Cu, Ge" --filter-thicknesses "750, 250, 500"
 
+
 Model a series of filters used together
 ---------------------------------------
 
 To model a stack of filters used together, use the `filters` option::
     $ spectrum-filter filters --filter-materials "Be, Cu, Ge" --filter-thicknesses "750, 250, 500"
+
 
 Configuration File
 ------------------
@@ -73,6 +76,7 @@ Model parameters are stored in **spectrum-filter.conf**. You can create a templa
     $ spectrum-filter init
 
 **spectrum-filter.conf** is constantly updated to keep track of the last stored parameters, as initalized by **init** or modified by setting a new option value. 
+
 
 Help
 ----
