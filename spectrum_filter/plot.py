@@ -10,6 +10,16 @@ from spectrum_filter import log
 bh.fread_config_file()
 
 
+def list_materials(params):
+    '''List the material options for filters and scintillators.
+    '''
+    log.info('  List of material options for filters')
+    for v in bh.possible_materials.values():
+        log.info('  *** {:s}: density = {:.2f} g/cc'.format(
+                    v.name, v.density))
+    log.info('  *** materials list done')
+
+
 def plot_sample_hardening(params):
     '''Plots the beam hardening caused by the sample.
     Plots the transmission, transmitted effective energy,

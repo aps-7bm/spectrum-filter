@@ -67,46 +67,6 @@ SECTIONS['sample'] = {
 
 
 SECTIONS['filters'] = {
-    'filter1-material': {
-        'default': 'Be',
-        'type': str,
-        'help': "Filter 1 material"},
-    'filter1-thickness': {
-        'default': 100.0,
-        'type': float,
-        'help': "Thickness of filter 1 in microns"},
-    'filter2-material': {
-        'default': 'Be',
-        'type': str,
-        'help': "Filter 2 material"},
-    'filter2-thickness': {
-        'default': 0.0,
-        'type': float,
-        'help': "Thickness of filter 2 in microns"},
-    'filter3-material': {
-        'default': 'Be',
-        'type': str,
-        'help': "Filter 3 material"},
-    'filter3-thickness': {
-        'default': 0.0,
-        'type': float,
-        'help': "Thickness of filter 3 in microns"},
-    'filter4-material': {
-        'default': 'Be',
-        'type': str,
-        'help': "Filter 4 material"},
-    'filter4-thickness': {
-        'default': 0.0,
-        'type': float,
-        'help': "Thickness of filter 4 in microns"},
-    'filter5-material': {
-        'default': 'Be',
-        'type': str,
-        'help': "Filter 5 material",},
-    'filter5-thickness': {
-        'default': 0.0,
-        'type': float,
-        'help': "Thickness of filter 5 in microns"},
     'filter-matl-list': {
         'default': 'none',
         'type': util.str_list,

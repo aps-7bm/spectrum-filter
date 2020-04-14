@@ -22,7 +22,6 @@ def init(args):
 
 
 def sample_plot(args):
-    print(args)
     plot.plot_sample_hardening(args)
 
 
@@ -36,6 +35,10 @@ def filter_set_plot(args):
 
 def scint_depth_plot(args):
     plot.plot_scintillator_thickness_effect(args)
+
+
+def list_materials(args):
+    plot.list_materials(args)
 
 
 def run_status(args):
@@ -55,6 +58,7 @@ def main():
         ('filters',     cum_filter_plot, config.ALL_PARAMS,              "Show effect of various filters"),
         ('filter-set',  filter_set_plot, config.ALL_PARAMS,              "Show effect of a filter set"),
         ('scintillator',scint_depth_plot,config.ALL_PARAMS,              "Show depth profile in scintillator"),
+        ('materials',   list_materials,  config.ALL_PARAMS,              "List on command line the filter options"),
         ('status',      run_status,      config.ALL_PARAMS,              "Show the status"),
     ]
 
@@ -81,8 +85,9 @@ def main():
     log.info("Saving log at %s" % lfname)
 
     try:
-        # config.log_values(args)
         args._func(args)
+        if args.config_update:
+            config.log_values(args)
     except RuntimeError as e:
         log.error(str(e))
         sys.exit(1)
