@@ -236,8 +236,10 @@ def plot_scintillator_thickness_effect(params):
     4. Marginal detected energy vs. depth
     ''' 
     input_spectrum = bh.fread_source_data(params.source_spectrum)
-    input_power = input_spectrum.fintegrated_power()
     bh.parse_params(params)
+    print(bh.filters)
+    filtered_spectrum = bh.fapply_filters(bh.filters, input_spectrum)
+    input_power = filtered_spectrum.fintegrated_power()
     log.info('  Plot the transmission and effective energy vs. scintillator thickness')
     log.info('  *** scintillator material = {:s}'.format(bh.scintillator['material'].name))
     log.info('  *** maximum thickness = {:0f}'.format(bh.scintillator['thickness']))
@@ -250,9 +252,7 @@ def plot_scintillator_thickness_effect(params):
     fig2, ax2 = plt.subplots()
     ax2.set_position([0.15, 0.25, 0.75, 0.65])
     plt.title('Mean Detected Energy')
-    filtered_spectrum = bh.fapply_filters(bh.filters, input_spectrum)
     scint_thicknesses = np.linspace(0, bh.scintillator['thickness'], 101)
-    incoming_spectra = np.zeros((filtered_spectrum.spectral_power.shape[0], scint_thicknesses.shape[0]))
     marginal_det_spectra = []
     cum_det_spectra = []
     trans_spectra = [filtered_spectrum]
@@ -260,7 +260,6 @@ def plot_scintillator_thickness_effect(params):
     cum_det_energy = []
     marginal_power = []
     cum_power = []
-    abs_spectra = np.zeros_like(incoming_spectra)
     delta_scint = scint_thicknesses[1] - scint_thicknesses[0]
     for i, t in enumerate(scint_thicknesses):
         marginal_det_spectra.append(bh.scintillator['material'].fcompute_absorbed_spectrum(delta_scint, trans_spectra[-1]))
