@@ -58,14 +58,14 @@ Model a set of filters used individually
 ----------------------------------------
 
 To model a set of filter options that will be used individually, use the `filter-set` option.::
-    $ spectrum-filter filter-set --filter-materials "Be, Cu, Ge" --filter-thicknesses "750, 250, 500"
+    $ spectrum-filter filter-set --filter-matl-list "Be, Cu, Ge" --filter-thick-list "750, 250, 500"
 
 
 Model a series of filters used together
 ---------------------------------------
 
 To model a stack of filters used together, use the `filters` option::
-    $ spectrum-filter filters --filter-materials "Be, Cu, Ge" --filter-thicknesses "750, 250, 500"
+    $ spectrum-filter filters --filter-matl-list "Be, Cu, Ge" --filter-thick-list "750, 250, 500"
 
 
 Configuration File
