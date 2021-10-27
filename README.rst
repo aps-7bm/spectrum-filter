@@ -38,7 +38,7 @@ Usage
 =====
 
 Specifying filter materials and thicknesses
-------------------------------------------
+-------------------------------------------
 
 To specify the filter materials, use the `--filter-materials` option.  Give the filters as a
 comma-delimited list of symbols in quotation marks.  Set the thicknesses of the filters with
@@ -47,7 +47,7 @@ the `filter-thicknesses` option in the same way.  For a list of the available fi
 
 
 Model beam hardening in sample
------------------------------
+------------------------------
 
 To model the transmission through various thicknesses of a sample material, use the `sample` option.
 For example, to model the transmission through aluminum up to 1 mm thick, use::
