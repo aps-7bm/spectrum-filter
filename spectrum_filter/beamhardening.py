@@ -67,9 +67,11 @@ sample_material = None
 possible_materials = {}
 
 # Add a trailing slash if missing
+print(Path(__file__))
 data_path = Path(__file__).parent.joinpath('beam_hardening_data')
 default_source = data_path.joinpath('Psi_00urad.dat')
-
+print(default_source)
+print(default_source.is_file())
 #Global variables for when we convert images
 input_spectrum = None
 centerline_spline = None
@@ -213,7 +215,9 @@ def fread_source_data(source_file = None):
     Return:
     Dictionary of spectra at the various psi angles from the ring plane.
     '''
+    print(source_file)
     if not source_file:
+        print(default_source)
         source_file = default_source
     else:
         source_file = Path(source_file)

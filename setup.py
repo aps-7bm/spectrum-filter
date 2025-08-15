@@ -10,8 +10,8 @@ setup(
     url='https://github.com/aps-7bm/spectrum-filter',
     packages=find_packages(),
     include_package_data = True,
+    package_data={'': ['spectrum_filter/beam_hardening_data']},
     scripts=['bin/spectrum-filter'],
     description='Find effective spectrum of filtered polychromatic x-rays',
     zip_safe=False,
 )
-
