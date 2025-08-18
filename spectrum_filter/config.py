@@ -1,6 +1,5 @@
 import os
 import sys
-import shutil
 from pathlib import Path
 import argparse
 import configparser
@@ -45,12 +44,15 @@ SECTIONS['scintillator'] = {
     'scint-material': {
         'type': str,
         'default': 'LuAG_Ce',
-        'choices': ['LuAG_Ce', 'YAG_Ce', 'LYSO_Ce'],
-        'help': "Scintillator material"},
+        'help': "Scintillator material: LuAG_Ce, YAG, LYSO_Ce, or formula"},
     'scint-thickness': {
         'default': 100.0,
         'type': float,
         'help': "Thickness of scintillator in microns"},
+    'scint-density': {
+        'default': 0.0,
+        'type': float,
+        'help': "Scintillator density.  Default 0 uses tabulated value"},
         }
 
 
@@ -83,6 +85,31 @@ SECTIONS['source'] = {
         'type': str,
         'default': str(bh_data_path.joinpath('Psi_00urad.dat')),
         'help': "Path to data file holding source spectral intensity"},
+    'calculate-source': {
+        'default': 'none',
+        'type': str,
+        'help': "Use tabulated (none, default) or calculated source",
+        'choices': ['none', 'standard']},
+    'e-storage-ring': {
+        'default': 7.0,
+        'type': float,
+        'help': "e-beam energy for BM source in GeV"},
+    'b-storage-ring': {
+        'default': 0.599,
+        'type': float,
+        'help': "Magnetic field for BM source in T"},
+    'minimum-E': {
+        'default': 1000,
+        'type': float,
+        'help': "Minimum energy for computing spectrum in eV"},
+     'maximum-E': {
+        'default': 150000,
+        'type': float,
+        'help': "Maximum energy for computing spectrum in eV"},
+    'step-E': {
+        'default': 500,
+        'type': float,
+        'help': "Energy step to use when computing spectrum, in keV"},
         }
 
 
@@ -103,6 +130,22 @@ def get_config_name():
                     name = name[1:]
                 return name
     return name
+
+
+def parse_known_args(parser, subparser=False):
+    """
+    Parse arguments from file and then override by the ones specified on the
+    command line. Use *parser* for parsing and is *subparser* is True take into
+    account that there is a value on the command line specifying the subparser.
+    """
+    if len(sys.argv) > 1:
+        subparser_value = [sys.argv[1]] if subparser else []
+        config_values = config_to_list(config_name=get_config_name())
+        values = subparser_value + config_values + sys.argv[1:]
+    else:
+        values = ""
+
+    return parser.parse_known_args(values)[0]
 
 
 def parse_known_args(parser, subparser=False):

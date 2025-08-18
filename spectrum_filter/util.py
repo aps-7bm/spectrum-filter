@@ -51,8 +51,8 @@ def str_list(value):
     """
     Split *value* separated by ',' into str list
     """
-    stripped_value = value.strip('\'\"')
-    return [i for i in stripped_value.split(',') if i != 'none']
+    stripped_value = value.strip('\'\" ')
+    return [i.strip() for i in stripped_value.split(',') if i != 'none']
 
 
 def restricted_float(x):
